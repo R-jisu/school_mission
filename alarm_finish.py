@@ -1,7 +1,7 @@
 ## 알람 만들기
 
 #!/usr/bin/python
-
+import draw_char 
 from ast import Module
 from datetime import datetime
 from itertools import count
@@ -80,8 +80,9 @@ def alarm_set_mode(event):
     elif alarmsetmode_flag == 0 and event.pin_num==5:
         i+=1
         weather(i)
-    # elif alarmsetmode_flag ==0 and lirc.nextcode()[0]=='99':
-        # draw_pic()
+    elif alarmsetmode_flag ==0 and lirc.nextcode()[0]=='99':
+        cad.lcd.clear()
+        draw_char.draw_py()
 
 #알람 세팅 중 시간 표시
 def write_alarm():
