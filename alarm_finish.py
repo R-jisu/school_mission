@@ -4,6 +4,7 @@
 
 from ast import Module
 from datetime import datetime
+from itertools import count
 from signal import alarm
 from pyowm.owm import OWM
 import threading
@@ -20,39 +21,38 @@ pygame.mixer.music.load("alarmring.mp3")
 
 def update_pin_text(event):
     cad.lcd.clear()
-    global mode
-    global ring
-    global alarmsetmode_flag
-    global alarm_timer
+    global mode;global ring;global alarmsetmode_flag
+    global alarm_timer; global timer
     if event.pin_num==2:
         alarm_timer.cancel()
         mode=2
     if event.pin_num==3:
-        alarm_timer.cancel()
+        cad.lcd.clear()
         mode=3
     if event.pin_num==4:
         pygame.mixer.music.stop()
+        timer.cancel()
+        alarm_timer.cancel()
         mode=1
         alarmsetmode_flag=0
         Check_time()
         alarm_update()
-    event.chip.lcd.set_cursor(13,0)
-    event.chip.lcd.write(str(event.pin_num))
+    # event.chip.lcd.set_cursor(13,0)
+    # event.chip.lcd.write(str(event.pin_num))
     cad.lcd.clear()
     set_mode(mode)
 
 #시계모드
 def clock_mode():
-    #cad.lcd.clear()
     cad.lcd.write(subprocess.run(['hostname', '-I'], capture_output=True, text=True).stdout)
     now = datetime.now()
     cad.lcd.set_cursor(0,1)
-    #cad.lcd.write(now.strftime("%m/%d %a %H:%M "))
     cad.lcd.write(now.strftime("%m/%d %H:%M:%S"))
     cad.lcd.set_cursor(0,0)
 
 #알람설정모드
 def alarm_set_mode(event):
+    global i
     cad.lcd.set_cursor(0,1)
     global alarmsetmode_flag
     global set_H;global set_M
@@ -63,7 +63,6 @@ def alarm_set_mode(event):
 
         #알람 시간 세팅
         if event.pin_num==5:
-
             set_H = change_H 
             set_M = change_M
             cad.lcd.set_cursor(0,1)
@@ -77,11 +76,12 @@ def alarm_set_mode(event):
             change_M +=1
         if event.pin_num==1:
             change_M +=10
-
         write_alarm()
-    else:
-        if lirc.nextcode()[0]=='99':
-            weather()
+    elif alarmsetmode_flag == 0 and event.pin_num==5:
+        i+=1
+        weather(i)
+    # elif alarmsetmode_flag ==0 and lirc.nextcode()[0]=='99':
+        # draw_pic()
 
 #알람 세팅 중 시간 표시
 def write_alarm():
@@ -99,21 +99,20 @@ def write_alarm():
 def alarm_on():
     global ring;global mode
     global set_H;global set_M
-    global alarm_timer
-    set_H=-1;set_M=-1
+    set_H=-1 ;set_M=-1
+    global alarm_timer; global timer
     alarm_timer.cancel()
     cad.lcd.clear()
     cad.lcd.set_cursor(0,0)
     cad.lcd.write("ALARM RING")
-    mode=0
-    
-    pygame.mixer.music.play(-1)
-    
     cad.lcd.set_cursor(0,1)
     cad.lcd.write("END:PushButton4")
+    mode=0
+    pygame.mixer.music.play()
 
 #알람과 현재 시간 비교
 def Check_time():
+    global timer
     timer = threading.Timer(0.5,Check_time)
     timer.start()
     now = datetime.now()
@@ -126,7 +125,8 @@ def Check_time():
     if(current_H==set_H and current_M==set_M):
         timer.cancel()
         alarm_on()
-    
+
+#알람 업데이트
 def alarm_update():
     global alarm_timer
     alarm_timer = threading.Timer(1,alarm_update)
@@ -134,26 +134,57 @@ def alarm_update():
     if mode==1:
         clock_mode()
 
-
 #알람 시간 체크 모드
 def alarm_check_mode():
     global set_H
     global set_M
-    cad.lcd.clear()
+    global mode
+    global cnt
+
+    cnt+=1
+    timer_3s = threading.Timer(1,alarm_check_mode)
+    timer_3s.start()
+
+    if cnt==3:
+        cnt=0
+        timer_3s.cancel()
+        set_mode()
+        return
     cad.lcd.set_cursor(0,0)
     cad.lcd.write("Check alarm time")
     cad.lcd.set_cursor(0,1)
     cad.lcd.write(f'at {set_H:02d}:{set_M:02d}')
 
 #날씨
-def weather():
+def weather(i):
     cad.lcd.clear()
     owm = OWM('b03b3e37c20ee389a016795db687a7be')
     mgr = owm.weather_manager()
 
-    observation = mgr.weather_at_place('Incheon')
+    if i%6==0:
+        observation = mgr.weather_at_place('Incheon')
+        place='Incheon' 
+    elif i%6==1:
+        observation = mgr.weather_at_place('London') 
+        place='London' 
+    elif i%6==2:
+        observation = mgr.weather_at_place('Holman') 
+        place='Holman' 
+    elif i%6==3:
+        observation = mgr.weather_at_place('Tokyo') 
+        place='Tokyo' 
+    elif i%6==4:
+        observation = mgr.weather_at_place('Bangkok')
+        place='Bangkok' 
+    elif i%6==5:
+        observation = mgr.weather_at_place('Paris') 
+        place='Paris' 
+
+
     weather = observation.weather
-    cad.lcd.write(f'{weather.status}_{weather.detailed_status}')
+    cad.lcd.write(f'{place}')
+    cad.lcd.set_cursor(0,1)
+    cad.lcd.write(f'{weather.detailed_status}')
 
 #시계 모드 설정
 def set_mode(mode_=1):
@@ -173,12 +204,13 @@ def set_mode(mode_=1):
     elif mode==1: clock_mode()
 
 cad = pifacecad.PiFaceCAD();cad.lcd.backlight_on();cad.lcd.cursor_off()
-global alarmsetmode_flag
-alarmsetmode_flag=0
+global alarmsetmode_flag;alarmsetmode_flag=0
+global mode; mode=1
+global i;i=-1; 
+global cnt; cnt=0
+now_for_change = datetime.now()
 global set_H;global set_M
 global change_H;global change_M
-global mode; mode=1
-now_for_change = datetime.now()
 change_H = now_for_change.hour; set_H = -1
 change_M = now_for_change.minute;   set_M = -1
 
